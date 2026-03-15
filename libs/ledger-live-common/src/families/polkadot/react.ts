@@ -24,9 +24,12 @@ export function usePolkadotPreloadData() {
   }, []);
   return state;
 }
-export const searchFilter: PolkadotSearchFilter = query => validator => {
-  const terms = `${validator?.identity ?? ""} ${validator?.address ?? ""}`;
-  return terms.toLowerCase().includes(query.toLowerCase().trim());
+export const searchFilter: PolkadotSearchFilter = query => {
+  const normalizedQuery = query.toLowerCase().trim();
+  return validator => {
+    const terms = `${validator?.identity ?? ""} ${validator?.address ?? ""}`;
+    return terms.toLowerCase().includes(normalizedQuery);
+  };
 };
 
 /** Hook to search and sort SR list according to initial votes and query */
@@ -36,13 +39,13 @@ export function useSortedValidators(
   nominations: PolkadotNomination[],
   validatorSearchFilter: PolkadotSearchFilter = searchFilter,
 ): PolkadotValidator[] {
-  const initialVotes = useMemoOnce(() => nominations.map(({ address }) => address));
+  const initialVotesSet = useMemoOnce(() => new Set(nominations.map(({ address }) => address)));
   const sortedVotes = useMemo(
     () =>
       validators
-        .filter(validator => initialVotes.includes(validator.address))
-        .concat(validators.filter(validator => !initialVotes.includes(validator.address))),
-    [validators, initialVotes],
+        .filter(validator => initialVotesSet.has(validator.address))
+        .concat(validators.filter(validator => !initialVotesSet.has(validator.address))),
+    [validators, initialVotesSet],
   );
   const sr = useMemo(
     () => (search ? validators.filter(validatorSearchFilter(search)) : sortedVotes),

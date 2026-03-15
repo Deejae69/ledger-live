@@ -83,18 +83,18 @@ export const formatVotes = (
     rank: number;
   }
 > => {
-  return votes && superRepresentatives
-    ? votes.map(({ address, voteCount }) => {
-        const srIndex = superRepresentatives.findIndex(sp => sp.address === address);
-        return {
-          validator: superRepresentatives[srIndex],
-          rank: srIndex + 1,
-          isSR: srIndex < SR_THRESHOLD,
-          address,
-          voteCount,
-        };
-      })
-    : [];
+  if (!votes || !superRepresentatives) return [];
+  const srIndexMap = new Map(superRepresentatives.map((sr, index) => [sr.address, index]));
+  return votes.map(({ address, voteCount }) => {
+    const srIndex = srIndexMap.get(address) ?? -1;
+    return {
+      validator: superRepresentatives[srIndex],
+      rank: srIndex + 1,
+      isSR: srIndex < SR_THRESHOLD,
+      address,
+      voteCount,
+    };
+  });
 };
 
 // wait an effect of a tron freeze until it effectively change
@@ -129,13 +129,14 @@ export function useTronPowerLoading(account: TronAccount): boolean {
 }
 
 /** Search filters for SR list */
-const searchFilter =
-  (query?: string) =>
-  ({ name, address }: { name: string | null | undefined; address: string }) => {
-    if (!query) return true;
+const searchFilter = (query?: string) => {
+  const normalizedQuery = query ? query.toLowerCase().trim() : "";
+  return ({ name, address }: { name: string | null | undefined; address: string }) => {
+    if (!normalizedQuery) return true;
     const terms = `${name || ""} ${address}`;
-    return terms.toLowerCase().includes(query.toLowerCase().trim());
+    return terms.toLowerCase().includes(normalizedQuery);
   };
+};
 
 /** Hook to search and sort SR list according to initial votes and query */
 export function useSortedSr(
@@ -149,7 +150,7 @@ export function useSortedSr(
   rank: number;
   isSR: boolean;
 }[] {
-  const { current: initialVotes } = useRef(votes.map(({ address }) => address));
+  const { current: initialVotesSet } = useRef(new Set(votes.map(({ address }) => address)));
   const SR = useMemo(
     () =>
       superRepresentatives.map((sr, rank) => ({
@@ -163,10 +164,10 @@ export function useSortedSr(
   );
   const sortedVotes = useMemo(
     () =>
-      SR.filter(({ address }) => initialVotes.includes(address)).concat(
-        SR.filter(({ address }) => !initialVotes.includes(address)),
+      SR.filter(({ address }) => initialVotesSet.has(address)).concat(
+        SR.filter(({ address }) => !initialVotesSet.has(address)),
       ),
-    [SR, initialVotes],
+    [SR, initialVotesSet],
   );
   const sr = useMemo(
     () => (search ? SR.filter(searchFilter(search)) : sortedVotes),
